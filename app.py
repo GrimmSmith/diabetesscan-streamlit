@@ -27,7 +27,6 @@ if not config_file.exists():
             }
         },
         "cookie": {"expiry_days": 1, "key": "diabetesscan_auth_key", "name": "diabetesscan_login"},
-        "pre-authorized": {"emails": []},
     }
     with open(config_file, "w") as f:
         yaml.dump(default_config, f, default_flow_style=False)
@@ -40,7 +39,6 @@ authenticator = Authenticate(
     config["cookie"]["name"],
     config["cookie"]["key"],
     config["cookie"]["expiry_days"],
-    config["pre-authorized"],
 )
 
 # ── Handle authentication ────────────────────────────────────────
