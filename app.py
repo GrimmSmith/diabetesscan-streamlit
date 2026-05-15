@@ -4,6 +4,8 @@ import numpy as np
 import joblib
 import time
 import yaml
+import json
+import hashlib
 from pathlib import Path
 from streamlit_authenticator import Authenticate
 
@@ -34,46 +36,83 @@ if not config_file.exists():
 with open(config_file, "r") as f:
     config = yaml.safe_load(f)
 
-authenticator = Authenticate(
-    config["credentials"],
-    config["cookie"]["name"],
-    config["cookie"]["key"],
-    config["cookie"]["expiry_days"],
-)
+# Initialize authenticator
+try:
+    authenticator = Authenticate(
+        config["credentials"],
+        config["cookie"]["name"],
+        config["cookie"]["key"],
+        config["cookie"]["expiry_days"],
+    )
+except Exception as e:
+    st.error(f"Authentication initialization error: {e}")
+    st.stop()
+
+# ── Save updated config ────────────────────────────────────────
+def save_config():
+    with open(config_file, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
 
 # ── Handle authentication ────────────────────────────────────────
-tab1, tab2, tab3 = st.sidebar.tabs(["🔐 Login", "📝 Sign Up", "ℹ️ Info"])
+st.sidebar.markdown("---")
+auth_tab = st.sidebar.radio("🔐 **Account**", ["Login", "Sign Up", "Info"], label_visibility="collapsed")
 
-with tab1:
+if auth_tab == "Login":
+    st.sidebar.markdown("### 🔐 Login")
     try:
-        authenticator.login()
+        authenticator.login(location="sidebar")
     except Exception as e:
-        st.error(e)
+        st.sidebar.error(f"Login error: {str(e)[:100]}")
 
-with tab2:
+elif auth_tab == "Sign Up":
+    st.sidebar.markdown("### 📝 Create Account")
     try:
-        if authenticator.register_user(preauthorization=False):
-            st.success("✅ Registration successful! Please login.")
+        username = st.sidebar.text_input("Username", key="signup_username")
+        email = st.sidebar.text_input("Email", key="signup_email")
+        password = st.sidebar.text_input("Password", type="password", key="signup_password")
+        password_confirm = st.sidebar.text_input("Confirm Password", type="password", key="signup_confirm")
+        
+        if st.sidebar.button("Sign Up", key="signup_btn"):
+            if not username or not email or not password:
+                st.sidebar.error("All fields are required")
+            elif password != password_confirm:
+                st.sidebar.error("Passwords do not match")
+            elif username in config["credentials"]["usernames"]:
+                st.sidebar.error("Username already exists")
+            else:
+                # Generate bcrypt hash
+                import bcrypt
+                hashed_pwd = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+                config["credentials"]["usernames"][username] = {
+                    "email": email,
+                    "name": username,
+                    "password": hashed_pwd
+                }
+                save_config()
+                st.sidebar.success("✅ Account created! Please login.")
     except Exception as e:
-        st.error(e)
+        st.sidebar.error(f"Signup error: {str(e)[:100]}")
 
-with tab3:
-    st.markdown("""
-    ### 📚 Demo Credentials
-    **Username:** demo  
-    **Password:** demo123
-    
-    Use these to try the app!
+else:  # Info tab
+    st.sidebar.markdown("### ℹ️ Demo Credentials")
+    st.sidebar.info("""
+    **Demo Account:**
+    - Username: `demo`
+    - Password: `demo123`
     """)
 
 # Check if user is authenticated
 if st.session_state.get("authentication_status"):
-    authenticator.logout(location="sidebar")
-    user = st.session_state["name"]
+    try:
+        authenticator.logout(location="sidebar", key="logout_btn")
+    except:
+        pass
+    user = st.session_state.get("name", "User")
+elif st.session_state.get("authentication_status") is False:
+    st.error("❌ Invalid username or password")
+    st.stop()
 else:
-    if st.session_state.get("authentication_status") is False:
-        st.error("❌ Username/password is incorrect")
-    st.info("👈 Please login or sign up using the sidebar tabs")
+    st.info("👈 Please login or sign up using the sidebar")
     st.stop()
 
 # ── Custom CSS ──────────────────────────────────────────────────
