@@ -3,14 +3,80 @@ import pandas as pd
 import numpy as np
 import joblib
 import time
+import yaml
+from pathlib import Path
+from streamlit_authenticator import Authenticate
 
 # ── Page config ────────────────────────────────────────────────
 st.set_page_config(
     page_title="DiabetesScan · AI Prediction",
     page_icon="🩺",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
+
+# ── Authentication Setup ────────────────────────────────────────
+config_file = Path("auth_config.yaml")
+
+# Create default auth config if it doesn't exist
+if not config_file.exists():
+    default_config = {
+        "credentials": {
+            "usernames": {
+                "demo": {"email": "demo@example.com", "name": "Demo User", "password": "$2b$12$EIxz2kX.fknW27w/Wc2.YeQ2OKVfPe0tCWt3eoWZhpfWgIXSKZwme"}  # password: demo123
+            }
+        },
+        "cookie": {"expiry_days": 1, "key": "diabetesscan_auth_key", "name": "diabetesscan_login"},
+        "pre-authorized": {"emails": []},
+    }
+    with open(config_file, "w") as f:
+        yaml.dump(default_config, f, default_flow_style=False)
+
+with open(config_file, "r") as f:
+    config = yaml.safe_load(f)
+
+authenticator = Authenticate(
+    config["credentials"],
+    config["cookie"]["name"],
+    config["cookie"]["key"],
+    config["cookie"]["expiry_days"],
+    config["pre-authorized"],
+)
+
+# ── Handle authentication ────────────────────────────────────────
+tab1, tab2, tab3 = st.sidebar.tabs(["🔐 Login", "📝 Sign Up", "ℹ️ Info"])
+
+with tab1:
+    try:
+        authenticator.login()
+    except Exception as e:
+        st.error(e)
+
+with tab2:
+    try:
+        if authenticator.register_user(preauthorization=False):
+            st.success("✅ Registration successful! Please login.")
+    except Exception as e:
+        st.error(e)
+
+with tab3:
+    st.markdown("""
+    ### 📚 Demo Credentials
+    **Username:** demo  
+    **Password:** demo123
+    
+    Use these to try the app!
+    """)
+
+# Check if user is authenticated
+if st.session_state.get("authentication_status"):
+    authenticator.logout(location="sidebar")
+    user = st.session_state["name"]
+else:
+    if st.session_state.get("authentication_status") is False:
+        st.error("❌ Username/password is incorrect")
+    st.info("👈 Please login or sign up using the sidebar tabs")
+    st.stop()
 
 # ── Custom CSS ──────────────────────────────────────────────────
 st.markdown("""
@@ -261,10 +327,10 @@ def predict(patient: dict) -> dict:
 
 
 # ── Hero ────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(f"""
 <div class="hero-wrap">
     <div class="hero-tag">🩺 AI-Powered Clinical Tool</div>
-    <div class="hero-title">Predict <span>Diabetes Risk</span><br/>in Seconds</div>
+    <div class="hero-title">Welcome, <span>{user}</span>!<br/>Predict <span>Diabetes Risk</span></div>
     <div class="hero-sub">Enter patient clinical data below. Our trained Gradient Boosting model
     will instantly assess diabetes probability.</div>
 </div>
